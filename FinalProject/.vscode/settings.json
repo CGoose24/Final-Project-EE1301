@@ -3,5 +3,8 @@
     "C_Cpp.default.configurationProvider": "particle.particle-vscode-core",
     "files.associations": {
         "*.ino": "cpp"
-    }
+    },
+    "particle.targetDevice": "carsons_photon",
+    "particle.targetPlatform": "p2",
+    "particle.firmwareVersion": "6.2.1"
 }
