@@ -11,17 +11,25 @@ SerialLogHandler logHandler(LOG_LEVEL_INFO);
 
 //Some commented stuff is from IoT4 for reference
 
-
+//learned how to use webhooks to send an email whenever motion is detected from: https://docs.particle.io/integrations/webhooks/
 
                                                             ////VARIABLES:////
 
 int motionPIN = D2; //motion sensor pin 
+int speakerPIN = A5; //speaker pin
 
 bool previousSensorState; 
 bool motionLogged; //used to ensure only 1 log (or output message) per detection
+bool currentMotion;
 int detectionCount;
 
-string timeStamp; //Learned time functions and formatting from: https://docs.particle.io/reference/device-os/api/time/zone/
+String timeStamp; //Learned time functions and formatting from: https://docs.particle.io/reference/device-os/api/time/zone/
+
+//speaker variables
+unsigned long int timeNow;
+unsigned long int timeLastBeep;
+bool highTone;
+int beepCount;
 
 //LED configuration:
 int PIXEL_COUNT = 3;
@@ -41,7 +49,7 @@ void colorWipeForward(uint32_t c, uint8_t wait);
 void colorWipeBackwards(uint32_t c, uint8_t wait);
 
 //serial port detection message for testing
-void detectionMessage(int detectionCount, string timeStamp);
+void detectionMessage(int detectionCount, String timeStamp);
 
 
 //int setModeFromString(String inputString); //cloud function calls this
@@ -61,6 +69,9 @@ void setup() {
   detectionCount = 0;
   previousSensorState = false; 
   motionLogged = false; 
+  currentMotion = false;
+  timeLastBeep = 0;
+  beepCount = 0;
 
   //FIXME: timezone not working  correctly
   //to make sure time is accurate:
@@ -71,8 +82,8 @@ void setup() {
   
   
   
-  //Particle.variable("DetectionCount", detectionCount);
-  //Particle.variable("DetectionTime", detectionTime); //Use some type of c++ function to record time
+  Particle.variable("DetectionCount", detectionCount);
+  Particle.variable("DetectionTime", timeStamp); //Use some type of c++ function to record time
   
   //Particle.variable("cV_targetTemp", targetTemp);
 
@@ -92,16 +103,19 @@ void loop() {
   //IF: motion was just detected:
   if(motionReading == HIGH && previousSensorState == false) {  
 
+    currentMotion = true;
     previousSensorState = true;
     motionLogged = false; 
-    RedLEDs(); 
+    
+    RedLEDs();
+    
 
     //only want motion to be logged once
     if(motionLogged == false) {
       detectionCount++;
 
       //record the time of motion detection (for detection log on website)
-      timeStamp = Time.format(Time.local(), "%m/%d/%Y %I:%M:%S %p").c_str(); //Formats timestamp as month/day/year, hours:mins:secs am/pm
+      timeStamp = Time.format(Time.local(), "%m/%d/%Y %I:%M:%S %p"); //Formats timestamp as month/day/year, hours:mins:secs am/pm
       detectionMessage(detectionCount, timeStamp); //output motion detected message (for debugging and testing)
 
       motionLogged = true; //wont retrigger
@@ -112,9 +126,42 @@ void loop() {
   } else if(motionReading == LOW && previousSensorState == true) {
 
     previousSensorState = false;
-    GreenLEDs(); 
+    currentMotion = false;
+    GreenLEDs(); //LEDS --> green
 
   }
+
+
+//non-blocking speaker alarm that continuously plays while motion is detected
+  if(currentMotion) {
+    timeNow = millis();
+    
+    if(timeNow-timeLastBeep >= 250) {
+      timeLastBeep = timeNow;
+      noTone(speakerPIN);
+
+      if(beepCount == 0) {
+        highTone = true;
+      }
+
+      if(highTone) {
+        tone(speakerPIN, 1800, 0);
+        beepCount++;
+        highTone = false;
+      }else if(!highTone) {
+        tone(speakerPIN, 1200, 0); 
+        beepCount++;
+        highTone = true;
+      }
+    }
+
+    } else {
+      noTone(speakerPIN); //speaker stops sounding
+      if(!highTone) {
+       highTone = true; //to stop speaker from starting on low tone
+      }
+    }
+
 }
 
 
@@ -156,9 +203,9 @@ void colorWipeBackwards(uint32_t c, uint8_t wait) {
   }
 }
 
-void detectionMessage(int detectionCount, string timeStamp) {
+void detectionMessage(int detectionCount, String timeStamp) {
       Serial.print("MOTION DETECTION ");
       Serial.print(detectionCount);
       Serial.print(" | ");
-      Serial.println(timeStamp.c_str()); //serial print only works with c strings
+      Serial.println(timeStamp); //serial print only works with c strings
 }
