@@ -13,10 +13,19 @@ SerialLogHandler logHandler(LOG_LEVEL_INFO);
 
 //learned how to use webhooks to send an email whenever motion is detected from: https://docs.particle.io/integrations/webhooks/
 
-                                                            ////VARIABLES:////
+                                                            ////DECLARATIONS:////
+
+#define DEVICE_ON 1
+#define DEVICE_OFF 0
+#define ALARM_ON 1
+#define ALARM_OFF 0
+
 
 int motionPIN = D2; //motion sensor pin 
 int speakerPIN = A5; //speaker pin
+
+int deviceMode = DEVICE_ON;
+int alarmMode = ALARM_OFF
 
 bool previousSensorState; 
 bool motionLogged; //used to ensure only 1 log (or output message) per detection
@@ -51,8 +60,10 @@ void colorWipeBackwards(uint32_t c, uint8_t wait);
 //serial port detection message for testing
 void detectionMessage(int detectionCount, String timeStamp);
 
+//Functions called by cloud functions
+int deviceMode(String inputString); 
+int alarmMode(String inputString);
 
-//int setModeFromString(String inputString); //cloud function calls this
 //int setTargetTempFromString(String inputString);
 
 
@@ -60,7 +71,7 @@ void detectionMessage(int detectionCount, String timeStamp);
  
                                                             ////SETUP:////
 
-void setup() {
+void setup() { //clean up by moving some variable initializations to the top
 
   pinMode(motionPIN, INPUT);
   Serial.begin(9600);
@@ -81,9 +92,13 @@ void setup() {
   //waitFor(Time.isValid, 10000);  // Wait up to 10s for time to sync
   
   
-  
+  //if wanted, could make struct for detection count to group detections by time since
   Particle.variable("DetectionCount", detectionCount);
   Particle.variable("DetectionTime", timeStamp); //Use some type of c++ function to record time
+  Particle.variable("CurrentMotion", currentMotion);
+
+  Particle.function("DeviceToggle", deviceMode);
+  Particle.function("AlarmToggle", alarmMode);
   
   //Particle.variable("cV_targetTemp", targetTemp);
 
@@ -168,6 +183,26 @@ void loop() {
 
 
                                                             ////FUNCTIONS:////
+
+int deviceMode(String inputString) {
+  if(inputString == "Device OFF") {
+    deviceMode = DEVICE_OFF;
+    return 0;
+  } else if(inputString == "Device ON") {
+    deviceMode = DEVICE_ON;
+    return 1;
+  }
+}
+
+int alarmMode(String inputString){
+  if(inputString == "Alarm OFF") {
+    deviceMode = ALARM_OFF;
+    return 0;
+  } else if(inputString == "Alarm ON") {
+    deviceMode = ALARM_ON;
+    return 1;
+  }
+}
 
 void RedLEDs() {
     colorWipeForward(strip.Color(0, 255, 0), 30); //cool animation from neopixel library
