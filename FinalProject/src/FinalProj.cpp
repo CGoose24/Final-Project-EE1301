@@ -24,8 +24,13 @@ SerialLogHandler logHandler(LOG_LEVEL_INFO);
 int motionPIN = D2; //motion sensor pin 
 int speakerPIN = A5; //speaker pin
 
-int deviceMode = DEVICE_ON;
-int alarmMode = ALARM_OFF
+int device_ON_PIN = D3; //for LED indictor 
+int device_OFF_PIN = D4;
+int alarm_ON_PIN = D5;
+int alarm_OFF_PIN = D6;
+
+int deviceModeIs = DEVICE_ON;
+int alarmModeIs = ALARM_OFF;
 
 bool previousSensorState; 
 bool motionLogged; //used to ensure only 1 log (or output message) per detection
@@ -39,6 +44,11 @@ unsigned long int timeNow;
 unsigned long int timeLastBeep;
 bool highTone;
 int beepCount;
+
+//Time Line variables
+unsigned long int T1 = millis();
+unsigned long int T2 = 0;
+int timeLine[12] = {0};
 
 //LED configuration:
 int PIXEL_COUNT = 3;
@@ -54,26 +64,33 @@ int PixelOFF  = strip.Color(   0,  0,   0);
 //LED functions
 void RedLEDs();
 void GreenLEDs();
+void NoLEDs();
 void colorWipeForward(uint32_t c, uint8_t wait);
 void colorWipeBackwards(uint32_t c, uint8_t wait);
 
 //serial port detection message for testing
 void detectionMessage(int detectionCount, String timeStamp);
 
+//log data (to be sent to website) for each detection 
+void logDetection();
+void timeLineShift();
+
 //Functions called by cloud functions
 int deviceMode(String inputString); 
 int alarmMode(String inputString);
 
-//int setTargetTempFromString(String inputString);
 
-
-
- 
                                                             ////SETUP:////
 
 void setup() { //clean up by moving some variable initializations to the top
 
   pinMode(motionPIN, INPUT);
+
+  pinMode(device_ON_PIN, OUTPUT); //TEST
+  pinMode(device_OFF_PIN, OUTPUT);
+  pinMode(alarm_ON_PIN, OUTPUT);
+  pinMode(alarm_OFF_PIN, OUTPUT);
+
   Serial.begin(9600);
   strip.begin();
 
@@ -84,99 +101,116 @@ void setup() { //clean up by moving some variable initializations to the top
   timeLastBeep = 0;
   beepCount = 0;
 
-  //FIXME: timezone not working  correctly
-  //to make sure time is accurate:
-  //waitUntil(Particle.connected);
-  //Particle.syncTime();
-  //Time.zone(-5); // Converts particle time zone to Central Time (from UTC)
-  //waitFor(Time.isValid, 10000);  // Wait up to 10s for time to sync
-  
-  
-  //if wanted, could make struct for detection count to group detections by time since
+  Time.zone(-5); // Converts particle time zone to Central Time (from UTC)
+
+  //coud variables 
   Particle.variable("DetectionCount", detectionCount);
-  Particle.variable("DetectionTime", timeStamp); //Use some type of c++ function to record time
+  Particle.variable("DetectionTime", timeStamp);
   Particle.variable("CurrentMotion", currentMotion);
+
+  //1 hour timeline: 5 min intervals, each variabe holds the # of detections during that interval
+  Particle.variable("Interval1", timeLine[0]);
+  Particle.variable("Interval2", timeLine[1]);
+  Particle.variable("Interval3", timeLine[2]);
+  Particle.variable("Interval4", timeLine[3]);
+  Particle.variable("Interval5", timeLine[4]);
+  Particle.variable("Interval6", timeLine[5]);
+  Particle.variable("Interval7", timeLine[6]);
+  Particle.variable("Interval8", timeLine[7]);
+  Particle.variable("Interval9", timeLine[8]);
+  Particle.variable("Interval10", timeLine[9]);
+  Particle.variable("Interval11", timeLine[10]);
+  Particle.variable("Interval12", timeLine[11]);
 
   Particle.function("DeviceToggle", deviceMode);
   Particle.function("AlarmToggle", alarmMode);
-  
-  //Particle.variable("cV_targetTemp", targetTemp);
-
-  //Particle.function("cF_SetMode", setModeFromString); //declares particle function that calls setModeFromString
-  //Particle.function("cF_setTargetTemp", setTargetTempFromString);
-
-
-
 }
 
                                                             ////LOOP:////
 
 void loop() {
 
+  
   int motionReading = digitalRead(motionPIN);
 
-  //IF: motion was just detected:
-  if(motionReading == HIGH && previousSensorState == false) {  
+  //Device toggled ON/OFF through website
+  if(deviceModeIs == DEVICE_ON) {
+    digitalWrite(device_ON_PIN, HIGH);
+    digitalWrite(device_OFF_PIN, LOW);
 
-    currentMotion = true;
-    previousSensorState = true;
-    motionLogged = false; 
-    
-    RedLEDs();
-    
+    //IF: motion was just detected:
+    if(motionReading == HIGH && previousSensorState == false) {  
 
-    //only want motion to be logged once
-    if(motionLogged == false) {
-      detectionCount++;
+      currentMotion = true;
+      previousSensorState = true;
+      motionLogged = false; 
+      RedLEDs();
+  
+      //only want motion to be logged once
+      if(motionLogged == false) {
+        logDetection();
+        
+        motionLogged = true; //wont retrigger
+      }
 
-      //record the time of motion detection (for detection log on website)
-      timeStamp = Time.format(Time.local(), "%m/%d/%Y %I:%M:%S %p"); //Formats timestamp as month/day/year, hours:mins:secs am/pm
-      detectionMessage(detectionCount, timeStamp); //output motion detected message (for debugging and testing)
+    //ELSE IF: motion just stopped being detected:
+    } else if(motionReading == LOW && previousSensorState == true) {
 
-      motionLogged = true; //wont retrigger
+      previousSensorState = false;
+      currentMotion = false;
+      GreenLEDs(); //LEDS --> green
 
     }
 
-  //ELSE IF: motion just stopped being detected:
-  } else if(motionReading == LOW && previousSensorState == true) {
 
-    previousSensorState = false;
-    currentMotion = false;
-    GreenLEDs(); //LEDS --> green
+    //non-blocking speaker alarm that continuously plays while motion is detected
+    if(alarmModeIs == ALARM_ON) {
+      digitalWrite(alarm_ON_PIN, HIGH); //alarm green LED ON
+      digitalWrite(alarm_OFF_PIN, LOW); //alarm red LED OFF
 
+      if(currentMotion) {
+        timeNow = millis();
+        
+        if(timeNow-timeLastBeep >= 250) {
+          timeLastBeep = timeNow;
+          noTone(speakerPIN);
+
+          if(beepCount == 0) {
+            highTone = true;
+          }
+
+          if(highTone) {
+            tone(speakerPIN, 1800, 0);
+            beepCount++;
+            highTone = false;
+          }else if(!highTone) {
+            tone(speakerPIN, 1200, 0); 
+            beepCount++;
+            highTone = true;
+          }
+        }
+
+        } else {
+          noTone(speakerPIN); //speaker stops sounding
+          if(!highTone) {
+          highTone = true; //to stop speaker from starting on low tone
+          }
+        }
+
+      } else {
+        digitalWrite(alarm_ON_PIN, LOW); //alarm green LED OFF
+        digitalWrite(alarm_OFF_PIN, HIGH); //alarm red LED ON
+      }
+
+  } else {
+    NoLEDs();
+    digitalWrite(device_OFF_PIN, HIGH);
+    digitalWrite(device_ON_PIN, LOW);
+    digitalWrite(alarm_OFF_PIN, HIGH); //also want the alarm LED red if device is off
+    digitalWrite(alarm_ON_PIN, LOW);
   }
 
-
-//non-blocking speaker alarm that continuously plays while motion is detected
-  if(currentMotion) {
-    timeNow = millis();
-    
-    if(timeNow-timeLastBeep >= 250) {
-      timeLastBeep = timeNow;
-      noTone(speakerPIN);
-
-      if(beepCount == 0) {
-        highTone = true;
-      }
-
-      if(highTone) {
-        tone(speakerPIN, 1800, 0);
-        beepCount++;
-        highTone = false;
-      }else if(!highTone) {
-        tone(speakerPIN, 1200, 0); 
-        beepCount++;
-        highTone = true;
-      }
-    }
-
-    } else {
-      noTone(speakerPIN); //speaker stops sounding
-      if(!highTone) {
-       highTone = true; //to stop speaker from starting on low tone
-      }
-    }
-
+  timeLineShift(); //shift time line array every 5 mins
 }
 
 
@@ -186,22 +220,47 @@ void loop() {
 
 int deviceMode(String inputString) {
   if(inputString == "Device OFF") {
-    deviceMode = DEVICE_OFF;
+    deviceModeIs = DEVICE_OFF;
     return 0;
   } else if(inputString == "Device ON") {
-    deviceMode = DEVICE_ON;
+    deviceModeIs = DEVICE_ON;
+    GreenLEDs(); 
     return 1;
+  } else {
+    return -1;
   }
 }
 
 int alarmMode(String inputString){
   if(inputString == "Alarm OFF") {
-    deviceMode = ALARM_OFF;
+    alarmModeIs = ALARM_OFF;
     return 0;
   } else if(inputString == "Alarm ON") {
-    deviceMode = ALARM_ON;
+    alarmModeIs = ALARM_ON;
     return 1;
+  } else {
+    return -1;
   }
+}
+
+void logDetection() {
+  timeLine[0]++; //increments the detection count for time line
+    
+  //record formatted time stamp (for detection log on website)
+  timeStamp = Time.format(Time.now(), "%I:%M:%S %p %m/%d/%Y "); //Formats timestamp as hours:mins:secs am/pm month/day/year
+  detectionMessage(detectionCount, timeStamp); //output motion detected message (for debugging and testing)
+}
+
+void timeLineShift() { 
+    //if 5 mins have passed, shift array to right -- for dynamic time line
+    T1 = millis();
+    if (T1 - T2 >= 300000) {
+      for (int i = 11; i > 0; i--) {
+        timeLine[i] = timeLine[i - 1];
+      }
+      timeLine[0] = 0; 
+      T2 = millis();
+    }
 }
 
 void RedLEDs() {
@@ -218,6 +277,13 @@ void GreenLEDs() {
     strip.setPixelColor(1, PixelColorGreen);
     strip.setPixelColor(2, PixelColorGreen);
     strip.show();
+}
+
+void NoLEDs() {
+  strip.setPixelColor(0, PixelOFF);
+  strip.setPixelColor(1, PixelOFF);
+  strip.setPixelColor(2, PixelOFF);
+  strip.show();
 }
 
 //FROM NEOPIXEL LIBRARY EXAMPLES

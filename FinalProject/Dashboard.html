@@ -5,6 +5,14 @@
   <title>StepSnitch | Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <script>
+      const deviceID = "0a10aced202194944a065074";
+      const accessToken = "2fd4eaf9ffe647ab84c8c109e4326f72761ae722";
+      const baseURL = `https://api.particle.io/v1/devices/${deviceID}`; 
+    </script>
+
   <style>
     :root {
       --bg: #0a0a0a;
@@ -192,7 +200,10 @@
   <div class="card status">
     <h2>Current Status:</h2>
     <p id="motionStatus"><span class="no-motion">✔ No Motion Detected</span></p>
+    <p><strong>Detection Count:</strong> <span id="detectionCount">--</span></p>
+    <p><strong>Last Detection Time:</strong> <span id="detectionTime">--</span></p>
   </div>
+  
 
   <div class="card controls">
     <h2>Controls</h2>
@@ -216,35 +227,139 @@
 
   <script>
     function toggleDevice() {
-      alert("Device toggled. (Connect to Particle or Firebase here)");
+      $.ajax({
+        url: `${baseURL}/DeviceToggle`,
+        method: "POST",
+        data: {
+          access_token: accessToken,
+          args: "Device TOGGLE"
+        },
+        success: function(data) {
+          alert(`DeviceToggle Result: ${data.return_value}`);
+        },
+        error: function(err) {
+          console.error("Device toggle failed", err);
+        }
+      });
     }
-
+  
     function toggleAlarm() {
-      alert("Alarm toggled. (Hook to speaker toggle logic)");
+      $.ajax({
+        url: `${baseURL}/AlarmToggle`,
+        method: "POST",
+        data: {
+          access_token: accessToken,
+          args: "Alarm TOGGLE"
+        },
+        success: function(data) {
+          alert(`AlarmToggle Result: ${data.return_value}`);
+        },
+        error: function(err) {
+          console.error("Alarm toggle failed", err);
+        }
+      });
     }
-
+  
     function clearLog() {
       if (confirm("Clear all log entries?")) {
         document.getElementById('logList').innerHTML = '';
       }
     }
-
+  
     function updateMotionStatus(detected) {
       const motionStatus = document.getElementById("motionStatus");
-      if (detected) {
+      if (detected === "true") {
         motionStatus.innerHTML = '<span class="motion">❗ Motion Detected!</span>';
       } else {
         motionStatus.innerHTML = '<span class="no-motion">✔ No Motion Detected</span>';
       }
     }
-
+  
     function toggleTheme() {
       const body = document.body;
       const button = document.querySelector('.theme-toggle');
       const lightMode = body.classList.toggle('light-theme');
       button.textContent = lightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode';
     }
+  
+    function fetchParticleVariables() {
+      $.ajax({
+        url: `${baseURL}/DetectionCount`,
+        data: { access_token: accessToken },
+        success: function(data) {
+          $("#detectionCount").text(data.result);
+        }
+      }).fail(function(err) {
+        console.error("Failed to fetch DetectionCount", err);
+      });
+  
+      $.ajax({
+        url: `${baseURL}/DetectionTime`,
+        data: { access_token: accessToken },
+        success: function(data) {
+          $("#detectionTime").text(data.result);
+        }
+      }).fail(function(err) {
+        console.error("Failed to fetch DetectionTime", err);
+      });
+  
+      $.ajax({
+        url: `${baseURL}/CurrentMotion`,
+        data: { access_token: accessToken },
+        success: function(data) {
+          updateMotionStatus(data.result);
+        }
+      }).fail(function(err) {
+        console.error("Failed to fetch CurrentMotion", err);
+      });
+    }
 
+  let deviceOn = true;
+  function toggleDevice() {
+  const newState = deviceOn ? "Device OFF" : "Device ON";
+
+  $.ajax({
+    url: `${baseURL}/DeviceToggle`,
+    method: "POST",
+    data: {
+      access_token: accessToken,
+      args: newState
+    },
+    success: function(data) {
+      alert(`DeviceToggle Result: ${data.return_value}`);
+      deviceOn = !deviceOn; // Flip the state
+    },
+    error: function(err) {
+      console.error("Device toggle failed", err);
+    }
+  });
+}
+
+let alarmOn = true;
+function toggleAlarm() {
+  const newState = alarmOn ? "Alarm OFF" : "Alarm ON";
+
+  $.ajax({
+    url: `${baseURL}/AlarmToggle`,
+    method: "POST",
+    data: {
+      access_token: accessToken,
+      args: newState
+    },
+    success: function(data) {
+      alert(`AlarmToggle Result: ${data.return_value}`);
+      alarmOn = !alarmOn; // Flip the state
+    },
+    error: function(err) {
+      console.error("Alarm toggle failed", err);
+    }
+  });
+}
+  
+    // Poll every 3 seconds
+    setInterval(fetchParticleVariables, 3000);
+    fetchParticleVariables(); // Initial load
+  
     const ctx = document.getElementById('timelineChart').getContext('2d');
     new Chart(ctx, {
       type: 'line',

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>StepSnitch | Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <script>
+      const deviceID = "0a10aced202194944a065074";
+      const accessToken = "2fd4eaf9ffe647ab84c8c109e4326f72761ae722";
+      const baseURL = `https://api.particle.io/v1/devices/${deviceID}`; 
+    </script>
+
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --bg-alt: #1a1a1a;
+      --text: #eaeaea;
+      --card-bg: rgba(255, 255, 255, 0.08);
+      --card-shadow: rgba(255, 255, 255, 0.15);
+      --text-light: #bbb;
+      --highlight-good: #00ff88;
+      --highlight-alert: #ff4444;
+      --button-bg: #ffffff;
+      --button-text: #000000;
+      --scrollbar: #ffffff;
+    }
+
+    .light-theme {
+      --bg: #f4f4f4;
+      --bg-alt: #eaeaea;
+      --text: #111;
+      --card-bg: rgba(0, 0, 0, 0.05);
+      --card-shadow: rgba(0, 0, 0, 0.1);
+      --text-light: #333;
+      --highlight-good: #008800;
+      --highlight-alert: #cc0000;
+      --button-bg: #000000;
+      --button-text: #ffffff;
+      --scrollbar: #000000;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 2rem;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(120deg, var(--bg), var(--bg-alt), var(--bg));
+      background-size: 400% 400%;
+      animation: gradientShift 30s ease infinite;
+      color: var(--text);
+      overflow-x: hidden;
+      min-height: 100vh;
+      transition: background 0.4s, color 0.4s;
+    }
+
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    h1 {
+      font-size: 3rem;
+      margin: 0;
+      color: var(--text);
+      text-shadow: 0 0 8px var(--text-light);
+      animation: fadeSlideIn 1s ease;
+    }
+
+    .subtitle {
+      color: var(--text-light);
+      margin-bottom: 2.5rem;
+      font-style: italic;
+      animation: fadeSlideIn 1.5s ease;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 0 20px var(--card-shadow);
+      animation: fadeSlideIn 2s ease;
+    }
+
+    .status span {
+      font-weight: bold;
+      font-size: 1.4rem;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .status .no-motion {
+      color: var(--highlight-good);
+    }
+
+    .status .motion {
+      color: var(--highlight-alert);
+    }
+
+    .controls button, .theme-toggle {
+      margin: 0.5rem;
+      padding: 0.8rem 1.6rem;
+      background: var(--button-bg);
+      border: none;
+      border-radius: 12px;
+      color: var(--button-text);
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 10px var(--card-shadow);
+    }
+
+    .controls button:hover, .theme-toggle:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 20px var(--card-shadow);
+    }
+
+    .log ul {
+      list-style-type: none;
+      padding: 0;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+
+    .log li {
+      padding: 0.7rem 0;
+      border-bottom: 1px solid #333;
+      color: var(--text);
+    }
+
+    .log button {
+      margin-top: 1rem;
+      padding: 0.4rem 0.8rem;
+      font-size: 0.75rem;
+      background: var(--button-bg);
+      border: none;
+      border-radius: 8px;
+      color: var(--button-text);
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--card-shadow);
+    }
+
+    .timeline {
+      margin-top: 1.5rem;
+      font-size: 0.9rem;
+      color: var(--text-light);
+    }
+
+    .timeline h3 {
+      margin-bottom: 0.5rem;
+      font-size: 1.2rem;
+      color: var(--text);
+    }
+
+    #timelineChart {
+      max-height: 200px;
+    }
+
+    .theme-toggle {
+      position: absolute;
+      top: 1.5rem;
+      right: 2rem;
+    }
+
+    @keyframes fadeSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--scrollbar);
+      border-radius: 4px;
+    }
+
+    .log li:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding-left: 0.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .timeline canvas {
+    transition: all 0.3s ease;
+  }
+
+  </style>
+</head>
+<body>
+
+  <button class="theme-toggle" onclick="toggleTheme()">Switch to Light Mode</button>
+  <h1>StepSnitch</h1>
+  <div class="subtitle">An infrared motion-triggered security system.</div>
+
+  <div class="card status">
+    <h2>Current Status:</h2>
+    <p id="motionStatus"><span class="no-motion">✔ No Motion Detected</span></p>
+    
+    <p><strong>Last Detection Time:</strong> <span id="detectionTime">--</span></p>
+  </div>
+  
+
+  <div class="card controls">
+    <h2>Controls</h2>
+    <button onclick="toggleDevice()">Toggle Device</button>
+    <button onclick="toggleAlarm()">Toggle Alarm</button>
+  </div>
+
+  <div class="card activity">
+    <h2>Recent Activity</h2>
+  
+    <div class="timeline" style="margin-bottom: 2rem;">
+      <h3>Timeline (Past Hour)</h3>
+      <canvas id="timelineChart"></canvas>
+    </div>
+  
+    <div class="log">
+      <h3>Detection Log</h3>
+      <ul id="logList">
+        <li>04/09/25 14:36 – No motion</li>
+        <li>04/09/25 14:21 – Motion detected!</li>
+      </ul>
+      <button onclick="clearLog()">Clear Log</button>
+    </div>
+  </div>
+  
+
+  <script>
+    // Track toggle state
+    let deviceOn = true;
+    let alarmOn = true;
+    let previousMotionDetected = false; // NEW: track previous motion state
+  
+    // Cloud function buttons
+    function toggleDevice() {
+      const newState = deviceOn ? "Device OFF" : "Device ON";
+      $.ajax({
+        url: `${baseURL}/DeviceToggle`,
+        method: "POST",
+        data: {
+          access_token: accessToken,
+          args: newState
+        },
+        success(data) {
+          alert(`DeviceToggle Result: ${data.return_value}`);
+          deviceOn = !deviceOn;
+        },
+        error(err) {
+          console.error("Device toggle failed", err);
+        }
+      });
+    }
+  
+    function toggleAlarm() {
+      const newState = alarmOn ? "Alarm OFF" : "Alarm ON";
+      $.ajax({
+        url: `${baseURL}/AlarmToggle`,
+        method: "POST",
+        data: {
+          access_token: accessToken,
+          args: newState
+        },
+        success(data) {
+          alert(`AlarmToggle Result: ${data.return_value}`);
+          alarmOn = !alarmOn;
+        },
+        error(err) {
+          console.error("Alarm toggle failed", err);
+        }
+      });
+    }
+  
+    // Status & log helpers
+    function clearLog() {
+      if (confirm("Clear all log entries?")) {
+        document.getElementById('logList').innerHTML = '';
+      }
+    }
+  
+    function updateMotionStatus(isDetected) {
+      const motionStatus = document.getElementById("motionStatus");
+      if (isDetected == true) {
+        motionStatus.innerHTML = '<span class="motion">🚨 Motion Detected!</span>';
+      } else {
+        motionStatus.innerHTML = '<span class="no-motion">✔ No Motion Detected</span>';
+      }
+    }
+  
+    function toggleTheme() {
+      const body = document.body;
+      const btn = document.querySelector('.theme-toggle');
+      const light = body.classList.toggle('light-theme');
+      btn.textContent = light ? 'Switch to Dark Mode' : 'Switch to Light Mode';
+    }
+  
+    // Fetch all cloud variables
+    function fetchParticleVariables() {
+      // Fetch CurrentMotion first
+      $.ajax({
+        url: `${baseURL}/CurrentMotion`,
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        },
+        success: function(data) {
+          console.log("CurrentMotion:", data.result);
+          const isDetected = data.result == true;
+          updateMotionStatus(isDetected);
+  
+          // If motion just started, log detection time
+          if (isDetected && !previousMotionDetected) {
+            fetchAndLogDetectionTime();
+          }
+          previousMotionDetected = isDetected;
+        },
+        error: function(err) {
+          console.error("Failed to fetch CurrentMotion", err);
+        }
+      });
+  
+      // Fetch DetectionTime (for updating status, not log)
+      $.ajax({
+        url: `${baseURL}/DetectionTime`,
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        },
+        success: function(data) {
+          console.log("DetectionTime:", data);
+          $("#detectionTime").text(data.result);
+        },
+        error: function(err) {
+          console.error("Failed to fetch DetectionTime", err);
+        }
+      });
+    }
+  
+    // NEW: fetch and insert DetectionTime into the log
+    function fetchAndLogDetectionTime() {
+      $.ajax({
+        url: `${baseURL}/DetectionTime`,
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        },
+        success: function(data) {
+          const logList = document.getElementById('logList');
+          const newEntry = document.createElement('li');
+          newEntry.textContent = `${data.result} – Motion detected!`;
+          logList.prepend(newEntry);
+        },
+        error: function(err) {
+          console.error("Failed to fetch DetectionTime for log", err);
+        }
+      });
+    }
+  
+    // Start polling
+    setInterval(fetchParticleVariables, 1500);
+    fetchParticleVariables(); // first call immediately
+  </script>
+    <script>
+const intervalVars = [
+  "Interval1", "Interval2", "Interval3", "Interval4",
+  "Interval5", "Interval6", "Interval7", "Interval8",
+  "Interval9", "Interval10", "Interval11", "Interval12"
+];
+
+// Prebuild labels for last 60 mins in 5 min slices
+function generateLabels() {
+  const labels = [];
+  const now = new Date();
+  
+  for (let i = 0; i < 12; i++) {
+    const past = new Date(now.getTime() - (i * 5 * 60000)); // 5 minutes * i
+    const hours = String(past.getHours()).padStart(2, '0');
+    const minutes = String(past.getMinutes()).padStart(2, '0');
+    labels.push(`${hours}:${minutes}`);
+  }
+  
+  return labels.reverse(); // So left -> right is oldest -> newest
+}
+
+// Setup Chart
+const ctx = document.getElementById('timelineChart').getContext('2d');
+const timelineChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: generateLabels(),
+    datasets: [{
+      label: 'Motions Detected (5 min intervals)',
+      data: Array(12).fill(0),
+      borderColor: 'rgba(100, 200, 255, 1)',
+      backgroundColor: 'rgba(100, 200, 255, 0.2)',
+      tension: 0.4,
+      fill: true,
+      pointRadius: 4,
+      pointHoverRadius: 8, /* 👈 NEW */
+      pointBackgroundColor: 'rgba(100, 200, 255, 1)',
+      borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          color: getComputedStyle(document.body).getPropertyValue('--text')
+        }
+      },
+      x: {
+        ticks: {
+          color: getComputedStyle(document.body).getPropertyValue('--text')
+        }
+      }
+    },
+    plugins: {
+      legend: {
+        labels: {
+          color: getComputedStyle(document.body).getPropertyValue('--text')
+        }
+      }
+    }
+  }
+});
+
+
+// Function to fetch all intervals
+function fetchTimelineIntervals() {
+  const promises = intervalVars.map(interval => 
+    $.ajax({
+      url: `${baseURL}/${interval}`,
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    })
+  );
+
+  Promise.all(promises)
+    .then(results => {
+      const detections = results.map(r => r.result);
+
+      timelineChart.data.datasets[0].data = detections.reverse(); // Reverse to oldest -> newest
+      timelineChart.data.labels = generateLabels(); // Update time labels
+      const maxVal = Math.max(...detections);
+      
+      // Adjust Y-axis dynamically
+      timelineChart.options.scales.y.max = maxVal < 5 ? 5 : Math.ceil(maxVal * 1.2);
+
+      timelineChart.update();
+    })
+    .catch(error => {
+      console.error("Failed to fetch timeline intervals", error);
+    });
+}
+
+// Update every 10 seconds
+setInterval(fetchTimelineIntervals, 10000);
+fetchTimelineIntervals(); // initial load
+</script>
+
+</body>
+</html>
