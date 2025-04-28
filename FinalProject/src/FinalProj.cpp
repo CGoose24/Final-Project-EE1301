@@ -9,9 +9,9 @@ SYSTEM_MODE(AUTOMATIC);
 SYSTEM_THREAD(ENABLED);
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
 
-//Some commented stuff is from IoT4 for reference
 
 //learned how to use webhooks to send an email whenever motion is detected from: https://docs.particle.io/integrations/webhooks/
+// and https://docs.particle.io/integrations/community-integrations/ifttt/
 
                                                             ////DECLARATIONS:////
 
@@ -74,6 +74,8 @@ void detectionMessage(int detectionCount, String timeStamp);
 //log data (to be sent to website) for each detection 
 void logDetection();
 void timeLineShift();
+
+void sendEmail();
 
 //Functions called by cloud functions
 int deviceMode(String inputString); 
@@ -149,7 +151,7 @@ void loop() {
       //only want motion to be logged once
       if(motionLogged == false) {
         logDetection();
-        
+
         motionLogged = true; //wont retrigger
       }
 
@@ -249,6 +251,8 @@ void logDetection() {
   //record formatted time stamp (for detection log on website)
   timeStamp = Time.format(Time.now(), "%I:%M:%S %p %m/%d/%Y "); //Formats timestamp as hours:mins:secs am/pm month/day/year
   detectionMessage(detectionCount, timeStamp); //output motion detected message (for debugging and testing)
+
+  sendEmail(); //call function to send email notification 
 }
 
 void timeLineShift() { 
@@ -309,4 +313,9 @@ void detectionMessage(int detectionCount, String timeStamp) {
       Serial.print(detectionCount);
       Serial.print(" | ");
       Serial.println(timeStamp); //serial print only works with c strings
+}
+
+//Send email by publishing event which triggers custom webhook to make.com, which then sends the email noti to user
+void sendEmail() {
+  Particle.publish("sendEmail", timeStamp, PRIVATE);
 }
